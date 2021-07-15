@@ -1,53 +1,6 @@
 # Functionality to download, clean and parse the text
 # files from NCBI into a Julia native datastructure
 
-baremodule Hosts
-import Base: @enum
-@enum Host::UInt8 human swine avian other
-export Host
-end # baremodule
-using .Hosts
-
-function Base.parse(::Type{Host}, s::Union{String, SubString})
-    lcase = lowercase(s)
-    lcase == "human" && return Hosts.human
-    lcase == "swine" && return Hosts.swine
-    lcase == "avian" && return Hosts.avian
-    return Hosts.other
-end
-
-struct ProteinORF
-    variant::Protein
-    orfs::Vector{UnitRange{UInt16}}
-end
-
-mutable struct SegmentData
-    id::String
-    host::Host
-    segment::Segment
-    serotype::Option{SeroType}
-    clade::Option{String}
-    year::Int16
-    name::String
-    proteins::Vector{ProteinORF}
-    seq::Option{LongDNASeq}
-end
-
-function download_influenza_data(dst_dir::AbstractString; force::Bool=false)
-    isdir(dst_dir) && !force && return nothing
-    isdir(dst_dir) || mkdir(dst_dir)
-    ftp_address = "https://ftp.ncbi.nih.gov/genomes/INFLUENZA/"
-    for filename in [
-        "genomeset.dat.gz",
-        "influenza.dat.gz",
-        "influenza.fna.gz",
-        "influenza_aa.dat.gz"
-        ]
-        Downloads.download(joinpath(ftp_address, filename), joinpath(dst_dir, filename))
-        println("Downloaded $filename")
-    end
-end
-
 """
     clean_genomeset(outpath::AbstractString, inpath::AbstractString)
 
@@ -73,7 +26,7 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
             error()
         end
 
-        gi, host, segment, subtype, country, year, len, name, age, gender, group = fields
+        gi, host, segment, subtype, country, year, len, isolate, age, gender, group = fields
 
         # Filter subtype
         subtype_upper = uppercase(subtype)
@@ -91,9 +44,9 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
             subtype_upper
         end
 
-        # Filter name
-        nn = parse_genomeset_name(name)
-        name = if is_error(nn)
+        # Filter isolate
+        nn = parse_genomeset_isolate(isolate)
+        isolate = if is_error(nn)
             ""
         else
             unwrap(nn)
@@ -106,16 +59,16 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
             year
         end 
 
-        println(outfile, join([gi, host, segment, subtype, country, year, len, name, age, gender, group], '\t'))
+        println(outfile, join([gi, host, segment, subtype, country, year, len, isolate, age, gender, group], '\t'))
     end
 
     close(decompressed)
     close(outfile)
 end
 
-# Parses a name in genomeset.dat during cleaning, returning none if it's malformed.
+# Parses a isolate in genomeset.dat during cleaning, returning none if it's malformed.
 # If it's unexpectedly malformed, throw an error"
-function parse_genomeset_name(s::Union{String, SubString})::Option{String}
+function parse_genomeset_isolate(s::Union{String, SubString})::Option{String}
     isempty(s) && return none
 
     occursin(r"^Influenza [AB] [vV]irus", s) || error(s)
@@ -162,9 +115,9 @@ function try_parse(::Type{SegmentData}, line::Union{String, SubString{String}}):
     year = @? try_parse_year(fields[6])
     host = parse(Host, fields[2])
     gi = String(fields[1])
-    name = String(fields[8])
+    isolate = String(fields[8])
     segment = @? try_parse_from_integer(Segment, fields[3])
-    some(SegmentData(gi, host, segment, serotype, none(String), year, name, ProteinORF[], none(LongDNASeq)))
+    some(SegmentData(gi, host, segment, serotype, year, isolate, ProteinORF[], none(LongDNASeq)))
 end
 
 function try_parse_year(s::Union{String, SubString})::Option{Int16}

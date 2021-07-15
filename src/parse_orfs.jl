@@ -1,3 +1,10 @@
+"""
+    add_orfs!(::Dict{String, SegmentData}, inf_aa_dat_path::String, inf_dat_path::String)
+
+Parse the files `influenza_aa.dat` and `influenza.dat`, extract information
+about ORFs, and update the `SegmentData` `proteins` field for all segment data
+present in the input dict. Returns the number of updated `SegmentData` instances.
+"""
 function add_orfs!(
     segment_data::Dict{String, SegmentData},
     inf_aa_dat_path::String,
@@ -56,7 +63,8 @@ function add_orfs!(segment_data::Dict{String, SegmentData}, accession_protein_ma
             push!(proteinbuffer, ProteinORF(variant, unwrap(orfs)))
         end
         if !is_bad
-            append!(data.proteins, proteinbuffer)
+            resize!(data.proteins, length(proteinbuffer))
+            copy!(data.proteins, proteinbuffer)
         end
     end
     return n_updates
