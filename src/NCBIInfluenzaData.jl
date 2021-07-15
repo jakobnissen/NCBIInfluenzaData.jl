@@ -1,9 +1,5 @@
 #=
 TODO:
-* Be more specific with missing SeroType vs Influenza B when parsing.
-data representation is OK, but I need to manually check the isolate if it's
-actually A or B.
-
 * It should not be possible to have a SegmentData without a sequence, since
 that is probably not useful. Instead, have a dummy type IncompleteSegmentData or
 whatever, and then create SegmentData from all input files, discarding any incomplete
@@ -111,6 +107,22 @@ include("parse_genomeset.jl")
 include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
+
+function parse_ncbi_records(
+    genomeset::String,
+    fasta::String,
+    influenza_aa_dat::String,
+    influenza_dat::String
+)
+    dict = parse_cleaned_genomeset(genomeset)
+    add_sequences!(dict, fasta)
+    add_orfs!(dict, influenza_aa_dat, influenza_dat)
+
+    # Now filter away any segments without seqs or orfs
+    filter!(dict) do (k, v)
+        !is_error(v.seq) && !isempty(v.protieins)
+    end
+end
 
 export clean_genomeset,
     parse_cleaned_genomeset,

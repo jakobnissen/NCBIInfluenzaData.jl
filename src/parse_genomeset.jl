@@ -28,9 +28,21 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
 
         gi, host, segment, subtype, country, year, len, isolate, age, gender, group = fields
 
-        # Filter subtype
+        # Filter isolate
+        maybe_alphaname = parse_genomeset_isolate(isolate)
+        (isalpha, isolate) = if is_error(maybe_alphaname)
+            nothing, ""
+        else
+            unwrap(maybe_alphaname)
+        end
+
+        # Filter subtype - set it to "" if not an influenza A
         subtype_upper = uppercase(subtype)
-        subtype = if startswith(subtype_upper, "MIXED")
+        subtype = if isalpha === nothing
+            ""
+        elseif !isalpha
+            ""
+        elseif startswith(subtype_upper, "MIXED")
             ""
         elseif subtype in ["H1", "H11N9/N2"]
             ""
@@ -42,14 +54,6 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
             "H6N1"
         else
             subtype_upper
-        end
-
-        # Filter isolate
-        nn = parse_genomeset_isolate(isolate)
-        isolate = if is_error(nn)
-            ""
-        else
-            unwrap(nn)
         end
 
         # Filter year
@@ -68,13 +72,17 @@ end
 
 # Parses a isolate in genomeset.dat during cleaning, returning none if it's malformed.
 # If it's unexpectedly malformed, throw an error"
-function parse_genomeset_isolate(s::Union{String, SubString})::Option{String}
+# Returns Option(is_alphavirus, name)
+function parse_genomeset_isolate(s::Union{String, SubString})::Option{Tuple{Bool, String}}
+    # They look like this: "Influenza A virus (A/swine/Minnesota/66960/2006(H3N2))"
     isempty(s) && return none
 
+    # Strip "Influenza A Virus" beginning off
     occursin(r"^Influenza [AB] [vV]irus", s) || error(s)
     ncodeunits(s) == 17 && return none
     rest = SubString(s, 18 + (codeunit(s, 18) == UInt(' ')):ncodeunits(s))
 
+    # Strip parenthesis off
     isempty(rest) && return none
     rest2 = if codeunit(rest, 1) == UInt8('(') && codeunit(rest, ncodeunits(rest)) == UInt8(')')
         SubString(rest, 2:ncodeunits(rest)-1)
@@ -82,14 +90,30 @@ function parse_genomeset_isolate(s::Union{String, SubString})::Option{String}
         rest
     end
 
+    # Some of them ends with "(mixed)" - these are useless and not real isolates.
+    if endswith(rest2, "(mixed)")
+        return none
+    end
+
+    # Now it should look like e.g. "A/mallard/Interior Alaska/8BM3586/2008(H3N8)"
+    # strip off the serotype designation, if present.
     m = match(r"\([Hh]\d+[nN]\d+\)$", rest2)
     rest3 = if m === nothing
         rest2
     else
         SubString(rest2, 1:ncodeunits(rest2) - ncodeunits(m.match))
     end
+
+    # Now it should look like "A/northern shoveler/Mississippi/09OS168/2009"
+    # verify it actually does so!
+    m = match(r"^([AB])/[^/]+/[^/]+(?:/[^/]+)?/\d{4}$", rest3)
+    if m === nothing
+        return none
+    end
     
-    return some(String(rest3))
+    isalpha = m.captures[1] == "A"
+    
+    return some((isalpha, String(rest3)))
 end
 
 ###
