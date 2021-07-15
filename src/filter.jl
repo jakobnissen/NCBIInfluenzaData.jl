@@ -10,8 +10,7 @@ Check if the `SegmentData` passes all criteria. Checks:
 * `isok_translatable`
 """
 function isok_all(data::SegmentData)::Bool
-    !is_error(data.seq) &&
-    count(isambiguous, unwrap(data.seq)) < 5 &&
+    count(isambiguous, data.seq) < 5 &&
     isok_minimum_proteins(data) &&
     isok_seq_length(data) &&
     isok_orf_length(data) &&
@@ -69,12 +68,12 @@ const ACCEPTABLE_SEGMENT_LENGTHS = Dict(
     isok_seq_length(::SegmentData)
 
 Check whether a segment's sequence length falls within a reasonable length interval.
-If the segment does not have a sequence, returns `false.`
+Always returns `true` for Influenza B segments.
 """
 function isok_seq_length(data::SegmentData)::Bool
     # The sizes for influenza B are a little different.
-    is_error(data.serotype) && return false
-    length(unwrap(data.seq)) in ACCEPTABLE_SEGMENT_LENGTHS[data.segment]
+    is_error(data.serotype) && return true
+    length(data.seq) in ACCEPTABLE_SEGMENT_LENGTHS[data.segment]
 end
 
 # This is pretty lax, so can be tightened later. It's just to remove
@@ -104,12 +103,10 @@ const ACCEPTABLE_ORF_LENGTHS = Dict(
     isok_orf_length(::SegmentData)
 
 Check whether a segment's ORF length falls within a reasonable length interval.
-If the segment does not have a SeroType, returns `true.`. Return `false` if the
-segment does not have any ORFs.
+If the segment does not have a SeroType, returns `true.`.
 """
 function isok_orf_length(data::SegmentData)::Bool
     is_error(data.serotype) && return true
-    isempty(data.proteins) && return false
     
     for protein in data.proteins
         len = sum(length, protein.orfs)
@@ -131,15 +128,13 @@ Check whether a segment's ORFs are translatable:
 * If only the last 3 bases of the joined ORFs are not a stop codon, return `false`.
 """
 function isok_translatable(data::SegmentData)::Bool
-    seq = @unwrap_or data.seq return false
-    isempty(data.proteins) && return false
     aa_sequence = LongAminoAcidSeq()
     nt_sequence = LongDNASeq()
     for protein in data.proteins
-        if any(last(orf) > length(seq) for orf in protein.orfs)
+        if any(last(orf) > length(data.seq) for orf in protein.orfs)
             return false
         end
-        join!(nt_sequence, (@view(seq[orf]) for orf in protein.orfs))
+        join!(nt_sequence, (@view(data.seq[orf]) for orf in protein.orfs))
 
         # Must have a length divisible by 3
         iszero(length(nt_sequence) % 3) || return false

@@ -1,11 +1,3 @@
-#=
-TODO:
-* It should not be possible to have a SegmentData without a sequence, since
-that is probably not useful. Instead, have a dummy type IncompleteSegmentData or
-whatever, and then create SegmentData from all input files, discarding any incomplete
-ones. Biologically implausible ones may be instantiated, and can be filtered afterwards.
-=#
-
 """
     NCBIInfluenzaData
 
@@ -80,6 +72,24 @@ struct ProteinORF
 end
 
 """
+    IncompleteSegmentData
+
+Placeholder struct used to incrementally build `SegmentData`. You can construct
+`SegmentData` using `SegmentData(::IncompleteSegmentData)`, after which the created
+struct takes ownership of all fields of the incomplete data.
+"""
+mutable struct IncompleteSegmentData
+    id::String
+    host::Host
+    segment::Segment
+    serotype::Option{SeroType}
+    year::Int16
+    isolate::String
+    proteins::Vector{ProteinORF}
+    seq::Option{LongDNASeq}
+end
+
+"""
     SegmentData
 
 Data structure representing an influenza segment from NCBI, and relevant information
@@ -92,7 +102,7 @@ Notes:
 * The SeroType is `none(SeroType)` if the segment is not Influenza A.
 * The isolate is the isolate name, e.g. "A/Denmark/1/2021".
 """
-mutable struct SegmentData
+struct SegmentData
     id::String
     host::Host
     segment::Segment
@@ -100,7 +110,16 @@ mutable struct SegmentData
     year::Int16
     isolate::String
     proteins::Vector{ProteinORF}
-    seq::Option{LongDNASeq}
+    seq::LongDNASeq
+end
+
+# What we need to check here is the presence of proteins and sequence, since these
+# are added separately to the incomplete records. The rest of the fields are checked
+# when instantiating the IncompleteSegmentData. The biological plausibility of the
+# data is not addressed at instantiation, only whether it's parsable.
+function SegmentData(x::IncompleteSegmentData)
+    isempty(x.proteins) && error("Cannot construct SegmentData from empty proteins")
+    SegmentData(x.id, x.host, x.segment, x.serotype, x.year, x.isolate, x.proteins, unwrap(x.seq))
 end
 
 include("parse_genomeset.jl")
@@ -108,6 +127,14 @@ include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
 
+"""
+    parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat)
+
+Parse NCBI records from the paths of four files: The cleaned "genomeset.dat"
+output of `clean_genomeset`, "influenza.fna.gz", "influenza_aa.dat.gz" and
+"influenza.dat.gz".
+Return a `Dict{String, SegmentData}` with keys being the accession number.
+"""
 function parse_ncbi_records(
     genomeset::String,
     fasta::String,
@@ -120,28 +147,31 @@ function parse_ncbi_records(
 
     # Now filter away any segments without seqs or orfs
     filter!(dict) do (k, v)
-        !is_error(v.seq) && !isempty(v.protieins)
+        !is_error(v.seq) && !isempty(v.proteins)
     end
+
+    # This is a fairly slow operation, but necessary
+    strip_false_termini!(dict)
+
+    return Dict(k => SegmentData(v) for (k, v) in dict)
 end
 
 export clean_genomeset,
-    parse_cleaned_genomeset,
+    parse_ncbi_records,
     isok_minimum_proteins,
     isok_orf_length,
     isok_seq_length,
     isok_translatable,
     isok_all,
-    SegmentData,
-    add_sequences!,
-    add_orfs!
+    SegmentData
 
 #=
-sd = open(NCBIInfluenzaData.parse_cleaned_genomeset, "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/processed/genomeset.filt.dat")
-NCBIInfluenzaData.add_sequences!(sd, "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/download/influenza.fna.gz")
-NCBIInfluenzaData.add_orfs!(
-    sd,
-    "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/download/influenza_aa.dat.gz",
-    "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/download/influenza.dat.gz"
+br = "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/"
+NCBIInfluenzaData.parse_ncbi_records(
+    br * "processed/genomeset.filt.dat",
+    br * "download/influenza.fna.gz",
+    br * "download/influenza_aa.dat.gz",
+    br * "download/influenza.dat.gz"
 )
 =#
 

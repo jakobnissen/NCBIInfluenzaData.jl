@@ -1,12 +1,12 @@
 """
-    add_orfs!(::Dict{String, SegmentData}, inf_aa_dat_path::String, inf_dat_path::String)
+    add_orfs!(::Dict{String, IncompleteSegmentData}, inf_aa_dat_path::String, inf_dat_path::String)
 
 Parse the files `influenza_aa.dat` and `influenza.dat`, extract information
-about ORFs, and update the `SegmentData` `proteins` field for all segment data
-present in the input dict. Returns the number of updated `SegmentData` instances.
+about ORFs, and update the `IncompleteSegmentData` `proteins` field for all segment data
+present in the input dict. Returns the number of updated `IncompleteSegmentData` instances.
 """
 function add_orfs!(
-    segment_data::Dict{String, SegmentData},
+    segment_data::Dict{String, IncompleteSegmentData},
     inf_aa_dat_path::String,
     inf_dat_path::String,
 )
@@ -34,7 +34,7 @@ function parse_inf_aa(io::IO)::Dict{String, Protein}
     result
 end
 
-function add_orfs!(segment_data::Dict{String, SegmentData}, accession_protein_map::Dict{String, Protein}, io::IO)
+function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_protein_map::Dict{String, Protein}, io::IO)
     n_updates = 0
     proteinbuffer = ProteinORF[]
     for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
@@ -104,5 +104,84 @@ function parse_range(s::AbstractString)::UnitRange{UInt16}
         stop = parse(UInt16, s[p2+1:ncodeunits(s)])
         start:stop
     end
-    iszero(range) && error("ORF range \"$s\" cannot contain the position zero.")
+    iszero(first(range)) && error("ORF range \"$s\" cannot contain the position zero.")
+    return range
+end
+
+"""
+    strip_false_termini!(data::Dict{String, IncompleteSegmentData})
+
+Some sequences given by NCBI are too long, containing linker or primer contamination.
+True influenza sequences begin with AGCAAAAGCAGG and ends with CTTGTTTCTACT. These
+termini are highly conserved, but may have a single substitution.
+We can allow sequences that do not include these noncoding ends, but we cannot
+allow artifacts flanking the true termini.
+
+This function must be called on completely initialized `IncompleteSegmentData`
+with both ORFs and sequence, since it modifies both the sequence and ORFs.
+"""
+function strip_false_termini!(data::Dict{String, IncompleteSegmentData})
+    toremove = Set{String}() # we remove these keys
+    n_stripped = 0
+    for (id, segment_data) in data
+        result = strip_false_termini!(segment_data)
+        n_stripped += @unwrap_or result begin
+            push!(toremove, id)
+            continue
+        end
+    end
+    if !iszero(length(toremove))
+        filter!(data) do (k, v)
+            !in(k, toremove)
+        end
+    end
+    return (n_stripped, length(toremove))
+end
+
+# Returns some(true/false), whether data was stripped off, and none if
+# the ORF goes into the stripped termini, and the sequence must be discarded
+function strip_false_termini!(data::IncompleteSegmentData)::Option{Bool}
+    is_error(data.seq) && return some(false)
+    false_termini = false_termini_length(data)
+    false_termini === nothing && return some(false)
+    trim5, trim3 = false_termini
+    iszero(trim5) && iszero(trim3) && return some(false)
+    seqlen = UInt16(length(unwrap(data.seq)))
+
+    # For safety, error if there are no ORFs. This function should not be called
+    # on segments without ORFs, since the orfs need to be modified by this funcion
+    isempty(data.proteins) && error("Termini must be stripped after adding ORFs to data")
+
+    # Trim sequence and ORFs.
+    data.seq = some(unwrap(data.seq)[trim5+1:seqlen-trim3])
+    for (proti, protein) in enumerate(data.proteins), (orfi, orf) in enumerate(protein.orfs)
+        if trim5 ≥ first(orf) || (seqlen - trim3) < last(orf)
+            return none
+        else
+            data.proteins[proti].orfs[orfi] = (first(orf) - trim5):(last(orf) - trim5)
+        end
+    end
+    return some(true)
+end
+
+# We allow to strip up to 100 bp in each end off
+function false_termini_length(data::IncompleteSegmentData)::Union{Nothing, Tuple{UInt16, UInt16}}
+    seq = @unwrap_or data.seq (return nothing)
+    trim5, trim3 = UInt16(0), UInt16(0)
+    # Find true beginning of sequence, if it's within first 100 bp
+    p = approxsearch(seq, dna"AGCAAAAGCAGG", 1)
+    if !isempty(p)
+        if first(p) < 100
+            trim5 = UInt16(first(p) - 1)
+        end
+    end
+    # Find true end of sequence
+    p = approxrsearch(seq, dna"CTTGTTTCTCCT", 1)
+    if !isempty(p)
+        trim3 = UInt16(lastindex(seq) - last(p))
+        if trim3 > 100
+            trim3 = UInt16(0)
+        end
+    end
+    return (trim5, trim3)
 end
