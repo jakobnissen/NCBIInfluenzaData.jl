@@ -16,14 +16,12 @@ function clean_genomeset(outpath::AbstractString, inpath::AbstractString)
     file = open(inpath)
     outfile = open(outpath, "w")
     decompressed = GzipDecompressorStream(file)
+    fields = Vector{SubString{String}}(undef, 11)
 
     for line in eachline(decompressed) |> Map(strip) ⨟ Filter(!isempty)
-        fields = split(line, '\t')
-        
-        # Check correct number of fields
-        if length(fields) != 11
-            println("Error: Should have 11 fields \"$line\"")
-            error()
+        # Check the correct number of fields
+        if unwrap_or(try_split!(fields, line, '\t'), 0) < 11
+            error("Error: Should have 11 fields \"$line\"")
         end
 
         gi, host, segment, subtype, country, year, len, isolate, age, gender, group = fields
@@ -106,14 +104,14 @@ function parse_genomeset_isolate(s::Union{String, SubString})::Option{Tuple{Bool
 
     # Now it should look like "A/northern shoveler/Mississippi/09OS168/2009"
     # verify it actually does so!
-    m = match(r"^([AB])/[^/]+/[^/]+(?:/[^/]+)?/\d{4}$", rest3)
-    if m === nothing
-        return none
-    end
-    
-    isalpha = m.captures[1] == "A"
-    
+    validate_isolate_format(rest3) || return none
+    isalpha = first(rest3) == 'A'
     return some((isalpha, String(rest3)))
+end
+
+function validate_isolate_format(s::AbstractString)
+    m = match(r"^([AB])/[^/]+/[^/]+(?:/[^/]+)?/\d{4}$", s)
+    return m !== nothing
 end
 
 ###
@@ -129,8 +127,13 @@ function try_parse(::Type{SeroType}, s::AbstractString)::Option{SeroType}
     st === nothing ? none : some(st)
 end
 
-function try_parse(::Type{IncompleteSegmentData}, line::Union{String, SubString{String}})::Option{IncompleteSegmentData}
-    fields = split(line, '\t')
+function try_parse(
+    ::Type{IncompleteSegmentData},
+    fields::Vector{SubString{String}},
+    line::Union{String, SubString{String}}
+)::Option{IncompleteSegmentData}
+    nfields = try_split!(fields, line, '\t')
+    unwrap_or(nfields, 0) == 11 || error("Expected 11 fields in \"$line\"")
     serotype = if isempty(strip(fields[4]))
         none(SeroType)
     else
@@ -142,6 +145,13 @@ function try_parse(::Type{IncompleteSegmentData}, line::Union{String, SubString{
     isolate = String(fields[8])
     segment = @? try_parse_from_integer(Segment, fields[3])
     some(IncompleteSegmentData(gi, host, segment, serotype, year, isolate, ProteinORF[], none(LongDNASeq)))
+end
+
+function try_parse(
+    ::Type{IncompleteSegmentData},
+    line::Union{String, SubString{String}}
+)::Option{IncompleteSegmentData}
+    try_parse(IncompleteSegmentData, Vector{SubString{String}}(undef, 11), line)
 end
 
 function try_parse_year(s::Union{String, SubString})::Option{Int16}

@@ -1,3 +1,11 @@
+#=
+To do:
+
+* Add clustering + serialization
+* Add extra records - maybe using Influenza.jl functionality?
+
+=#
+
 """
     NCBIInfluenzaData
 
@@ -15,6 +23,35 @@ using Transducers
 using UnicodePlots
 using Influenza
 import Downloads
+
+function try_split!(
+    v::Vector{SubString{String}},
+    s::Union{String, SubString{String}},
+    sep::UInt8
+)::Option{UInt}
+    n = UInt(0)
+    start = 1
+    isempty(v) && return none
+    @inbounds for i in 1:ncodeunits(s)
+        if codeunit(s, i) == sep
+            n += 1
+            n >= length(v) && return none
+            substr = SubString(s, start, i-1)
+            @inbounds v[n] = substr
+            start = i + 1
+        end
+    end
+    @inbounds v[n+1] = SubString(s, start, ncodeunits(s))
+    some(n + 1)
+end
+
+function try_split!(
+    v::Vector{SubString{String}},
+    s::Union{String, SubString{String}},
+    sep::Char
+)::Option{UInt}
+    try_split!(v, s, UInt8(sep))
+end
 
 # This is pretty primitive, but fuck it
 function maybe_gzip(f, path::AbstractString)
@@ -126,6 +163,7 @@ include("parse_genomeset.jl")
 include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
+include("extra_records.jl")
 
 """
     parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat)
