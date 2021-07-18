@@ -164,6 +164,7 @@ include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
 include("extra_records.jl")
+include("clustering.jl")
 
 """
     parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat)
@@ -201,11 +202,13 @@ export clean_genomeset,
     isok_seq_length,
     isok_translatable,
     isok_all,
-    SegmentData
+    SegmentData,
+    serialize_segments,
+    cd_hit_deduplicate_all
 
 #=
 br = "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/"
-NCBIInfluenzaData.parse_ncbi_records(
+data = NCBIInfluenzaData.parse_ncbi_records(
     br * "processed/genomeset.filt.dat",
     br * "download/influenza.fna.gz",
     br * "download/influenza_aa.dat.gz",
