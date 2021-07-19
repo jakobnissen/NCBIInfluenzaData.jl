@@ -36,7 +36,7 @@ end
 
 function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_protein_map::Dict{String, Protein}, io::IO)
     n_updates = 0
-    proteinbuffer = ProteinORF[]
+    proteinbuffer = ReferenceProtein[]
     for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
         fields = split(line, '\t')
         gb_accession = first(fields)
@@ -60,7 +60,7 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
                 is_bad = true
                 break
             end
-            push!(proteinbuffer, ProteinORF(variant, unwrap(orfs)))
+            push!(proteinbuffer, ReferenceProtein(variant, unwrap(orfs)))
         end
         if !is_bad
             resize!(data.proteins, length(proteinbuffer))
@@ -70,7 +70,7 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
     return n_updates
 end
         
-function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{UnitRange{UInt16}}}
+function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{UnitRange{UInt32}}}
     # If it looks like gb|AB266090:<411->632, the ORF is not present
     # in the reference, and we skip it
     if occursin('>', s) || occursin('<', s)
@@ -93,15 +93,15 @@ function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{Uni
     some(result)
 end
 
-function parse_range(s::AbstractString)::UnitRange{UInt16}
+function parse_range(s::AbstractString)::UnitRange{UInt32}
     p2 = findfirst(isequal('-'), s)
     # If it's not a range, it must be a single number
     range = if p2 === nothing
-        n = parse(UInt16, s)
+        n = parse(UInt32, s)
         n:n
     else
-        start = parse(UInt16, @view s[1:p2-1])
-        stop = parse(UInt16, s[p2+1:ncodeunits(s)])
+        start = parse(UInt32, @view s[1:p2-1])
+        stop = parse(UInt32, s[p2+1:ncodeunits(s)])
         start:stop
     end
     iszero(first(range)) && error("ORF range \"$s\" cannot contain the position zero.")
@@ -146,7 +146,7 @@ function strip_false_termini!(data::IncompleteSegmentData)::Option{Bool}
     false_termini === nothing && return some(false)
     trim5, trim3 = false_termini
     iszero(trim5) && iszero(trim3) && return some(false)
-    seqlen = UInt16(length(unwrap(data.seq)))
+    seqlen = UInt32(length(unwrap(data.seq)))
 
     # For safety, error if there are no ORFs. This function should not be called
     # on segments without ORFs, since the orfs need to be modified by this funcion
@@ -165,22 +165,22 @@ function strip_false_termini!(data::IncompleteSegmentData)::Option{Bool}
 end
 
 # We allow to strip up to 100 bp in each end off
-function false_termini_length(data::IncompleteSegmentData)::Union{Nothing, Tuple{UInt16, UInt16}}
+function false_termini_length(data::IncompleteSegmentData)::Union{Nothing, Tuple{UInt32, UInt32}}
     seq = @unwrap_or data.seq (return nothing)
-    trim5, trim3 = UInt16(0), UInt16(0)
+    trim5, trim3 = UInt32(0), UInt32(0)
     # Find true beginning of sequence, if it's within first 100 bp
     p = approxsearch(seq, dna"AGCAAAAGCAGG", 1)
     if !isempty(p)
         if first(p) < 100
-            trim5 = UInt16(first(p) - 1)
+            trim5 = UInt32(first(p) - 1)
         end
     end
     # Find true end of sequence
     p = approxrsearch(seq, dna"CTTGTTTCTCCT", 1)
     if !isempty(p)
-        trim3 = UInt16(lastindex(seq) - last(p))
+        trim3 = UInt32(lastindex(seq) - last(p))
         if trim3 > 100
-            trim3 = UInt16(0)
+            trim3 = UInt32(0)
         end
     end
     return (trim5, trim3)

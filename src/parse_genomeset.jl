@@ -144,7 +144,7 @@ function try_parse(
     gi = String(fields[1])
     isolate = String(fields[8])
     segment = @? try_parse_from_integer(Segment, fields[3])
-    some(IncompleteSegmentData(gi, host, segment, serotype, year, isolate, ProteinORF[], none(LongDNASeq)))
+    some(IncompleteSegmentData(gi, host, segment, serotype, year, isolate, ReferenceProtein[], none(LongDNASeq)))
 end
 
 function try_parse(

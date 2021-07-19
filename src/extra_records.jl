@@ -68,7 +68,7 @@ function try_parse_fasta_header(::Type{IncompleteSegmentData}, line::Union{Strin
     try_parse_fasta_header(IncompleteSegmentData, Vector{SubString{String}}(undef, 6), line)
 end
 
-#=
+
 struct Unbounded end
 const FeatureRange = Tuple{Union{Unbounded, UInt}, Union{Unbounded, UInt}}
 struct Feature
@@ -171,9 +171,7 @@ function try_parse_feature_number(
     n === nothing && return none
     return some(n::UInt)
 end
-=#
 
-#=
 function fill_orfs_extra_records!(records::Dict{String, IncompleteSegmentData}, annotpath::String)
     chunks = maybe_gzip(annotpath) do file
         partition_chunks(file)
@@ -239,9 +237,7 @@ function parse_annot_segment_data!(
     end
     records
 end
-=#
 
-#=
 function add_extra_records!(
     segment_data::Dict{String, SegmentData},
     annotpath::String,
@@ -301,6 +297,3 @@ function parse_data_from_header(header::String, deduplicate::Bool)::SegmentData
         RefValue(none(LongDNASeq))
     )
 end
-
-
-=#

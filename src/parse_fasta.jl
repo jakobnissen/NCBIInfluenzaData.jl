@@ -33,7 +33,7 @@ function strip_false_termini!(data::Dict{String, IncompleteSegmentData})
         false_termini === nothing && continue
         trim5, trim3 = false_termini
         iszero(trim5) && iszero(trim3) && continue
-        seqlen = UInt16(length(unwrap(segment_data.seq[])))
+        seqlen = UInt32(length(unwrap(segment_data.seq[])))
         segment_data.seq[] = some(unwrap(segment_data.seq[])[trim5+1:seqlen-trim3])
         for (proti, protein) in enumerate(segment_data.proteins), (orfi, orf) in enumerate(protein.orfs)
             if trim5 ≥ first(orf) || (seqlen - trim3) < last(orf)
@@ -61,7 +61,7 @@ function strip_false_termini!(data::IncompleteSegmentData)::Bool
     false_termini === nothing && return false
     trim5, trim3 = false_termini
     iszero(trim5) && iszero(trim3) && return false
-    seqlen = UInt16(length(unwrap(data.seq)))
+    seqlen = UInt32(length(unwrap(data.seq)))
 
 
     toremove = Set{String}() # we remove these keys
@@ -71,7 +71,7 @@ function strip_false_termini!(data::IncompleteSegmentData)::Bool
         false_termini === nothing && continue
         trim5, trim3 = false_termini
         iszero(trim5) && iszero(trim3) && continue
-        seqlen = UInt16(length(unwrap(segment_data.seq[])))
+        seqlen = UInt32(length(unwrap(segment_data.seq[])))
         segment_data.seq[] = some(unwrap(segment_data.seq[])[trim5+1:seqlen-trim3])
         for (proti, protein) in enumerate(segment_data.proteins), (orfi, orf) in enumerate(protein.orfs)
             if trim5 ≥ first(orf) || (seqlen - trim3) < last(orf)
@@ -93,22 +93,22 @@ function strip_false_termini!(data::IncompleteSegmentData)::Bool
 end
 
 # We allow to strip up to 100 bp in each end off
-function false_termini_length(data::SegmentData)::Union{Nothing, Tuple{UInt16, UInt16}}
+function false_termini_length(data::SegmentData)::Union{Nothing, Tuple{UInt32, UInt32}}
     seq = @unwrap_or data.seq (return nothing)
-    trim5, trim3 = UInt16(0), UInt16(0)
+    trim5, trim3 = UInt32(0), UInt32(0)
     # Find true beginning of sequence, if it's within first 100 bp
     p = approxsearch(seq, dna"AGCAAAAGCAGG", 1)
     if !isempty(p)
         if first(p) < 100
-            trim5 = UInt16(first(p) - 1)
+            trim5 = UInt32(first(p) - 1)
         end
     end
     # Find true end of sequence
     p = approxrsearch(seq, dna"CTTGTTTCTCCT", 1)
     if !isempty(p)
-        trim3 = UInt16(lastindex(seq) - last(p))
+        trim3 = UInt32(lastindex(seq) - last(p))
         if trim3 > 100
-            trim3 = UInt16(0)
+            trim3 = UInt32(0)
         end
     end
     return (trim5, trim3)

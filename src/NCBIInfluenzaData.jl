@@ -24,6 +24,8 @@ using UnicodePlots
 using Influenza
 import Downloads
 
+import Influenza: ReferenceProtein
+
 function try_split!(
     v::Vector{SubString{String}},
     s::Union{String, SubString{String}},
@@ -98,17 +100,6 @@ function Base.parse(::Type{Host}, s::Union{String, SubString})
 end
 
 """
-    ProteinORF
-
-A data structure that represents an Influenza A/B protein and the positions of the ORFs
-that encode the protein for a given nucleotide sequence.
-"""
-struct ProteinORF
-    variant::Protein
-    orfs::Vector{UnitRange{UInt16}}
-end
-
-"""
     IncompleteSegmentData
 
 Placeholder struct used to incrementally build `SegmentData`. You can construct
@@ -122,7 +113,7 @@ mutable struct IncompleteSegmentData
     serotype::Option{SeroType}
     year::Int16
     isolate::String
-    proteins::Vector{ProteinORF}
+    proteins::Vector{ReferenceProtein}
     seq::Option{LongDNASeq}
 end
 
@@ -146,7 +137,7 @@ struct SegmentData
     serotype::Option{SeroType}
     year::Int16
     isolate::String
-    proteins::Vector{ProteinORF}
+    proteins::Vector{ReferenceProtein}
     seq::LongDNASeq
 end
 
@@ -159,11 +150,14 @@ function SegmentData(x::IncompleteSegmentData)
     SegmentData(x.id, x.host, x.segment, x.serotype, x.year, x.isolate, x.proteins, unwrap(x.seq))
 end
 
+function Influenza.Reference(x::SegmentData)
+    Influenza.Reference(x.id, x.segment, copy(x.seq), copy(x.proteins))
+end
+
 include("parse_genomeset.jl")
 include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
-include("extra_records.jl")
 include("clustering.jl")
 
 """
