@@ -1,16 +1,10 @@
-#=
-To do:
-
-* Add clustering + serialization
-* Add extra records - maybe using Influenza.jl functionality?
-
-=#
-
 """
     NCBIInfluenzaData
 
 Package for parsing and filtering NCBI's bulk influenza data. This can be used to
 extract and work with tens of thousands of sequences in bulk.
+
+It has been confirmed to work with the NCBI data of 2020-10-13
 """
 module NCBIInfluenzaData
 
@@ -69,9 +63,14 @@ function maybe_gzip(f, path::AbstractString)
     end
 end
 
+"""
+    download_influenza_data(dst::AbstractString, force::Bool=false)
+
+Download data from the NCBI FTP server to an existing directory `dst`.
+If `force`, re-download, even if the files already exist in the directory.
+"""
 function download_influenza_data(dst_dir::AbstractString; force::Bool=false)
-    isdir(dst_dir) && !force && return nothing
-    isdir(dst_dir) || mkdir(dst_dir)
+    isdir(dst_dir) || error("Path is not a directory: \"$dst_dir\"")
     ftp_address = "https://ftp.ncbi.nih.gov/genomes/INFLUENZA/"
     for filename in [
         "genomeset.dat.gz",
@@ -79,8 +78,10 @@ function download_influenza_data(dst_dir::AbstractString; force::Bool=false)
         "influenza.fna.gz",
         "influenza_aa.dat.gz"
         ]
-        Downloads.download(joinpath(ftp_address, filename), joinpath(dst_dir, filename))
-        println("Downloaded $filename")
+        dstpath = joinpath(dst_dir, filename)
+        if !isfile(dstpath) || force
+            Downloads.download(joinpath(ftp_address, filename), dstpath)
+        end
     end
 end
 
@@ -189,25 +190,45 @@ function parse_ncbi_records(
     return Dict(k => SegmentData(v) for (k, v) in dict)
 end
 
-export clean_genomeset,
-    parse_ncbi_records,
-    isok_minimum_proteins,
-    isok_orf_length,
-    isok_seq_length,
-    isok_translatable,
-    isok_all,
-    SegmentData,
-    serialize_segments,
-    cd_hit_deduplicate_all
+"""
+    run_all(dir::AbstractString)
 
-#=
-br = "/Users/jakobnissen/Documents/ssi/projects/flupipe/build_references/"
-data = NCBIInfluenzaData.parse_ncbi_records(
-    br * "processed/genomeset.filt.dat",
-    br * "download/influenza.fna.gz",
-    br * "download/influenza_aa.dat.gz",
-    br * "download/influenza.dat.gz"
-)
-=#
+Convenience function: Downloads influenza data to `dir` if not already present,
+then cleans the genomeset, then parses the records, filters them, deduplicate them,
+and serialize both all records and the deduplicated ones, as well as writes FASTA
+files to the directory.
+
+The executable `cd_hit_est` must be in the Julia PATH
+"""
+function run_all(dir::AbstractString)
+    println("Downloading...")
+    download_influenza_data(dir)
+    
+    println("Cleaning genomeset.dat.gz...")
+    clean_genomeset("$dir/genomeset.clean.dat", "$dir/genomeset.dat.gz")
+
+    println("Parsing records...")
+    data = parse_ncbi_records(
+        "$dir/genomeset.clean.dat",
+        "$dir/influenza.fna.gz",
+        "$dir/influenza_aa.dat.gz",
+        "$dir/influenza.dat.gz",
+    )
+    
+    println("Filtering records...")
+    filter!(data) do (k, v)
+        isok_all(v)
+    end
+
+    println("Deduplicating...")
+    (dedup, path) = cd_hit_deduplicate_all(data)
+    
+    println("Serializing")
+    references = Influenza.Reference.(values(data))
+    store_references("$dir/records", references, true)
+    dedup_refs = Influenza.Reference.(values(dedup))
+    store_references("$dir/deduplicated", dedup_refs, true)
+    println("Done!")
+end
 
 end # module

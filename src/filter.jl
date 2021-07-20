@@ -47,7 +47,7 @@ function isok_minimum_proteins(data::SegmentData)::Bool
         @assert false "Unreachable!" # This helps inference
     end
     return !any(minimum) do protein
-        isnothing(findfirst(i -> i.variant == protein, data.proteins))
+        isnothing(findfirst(i -> i.var == protein, data.proteins))
     end
 end
 
@@ -110,7 +110,7 @@ function isok_orf_length(data::SegmentData)::Bool
     
     for protein in data.proteins
         len = sum(length, protein.orfs)
-        range = ACCEPTABLE_ORF_LENGTHS[protein.variant]
+        range = ACCEPTABLE_ORF_LENGTHS[protein.var]
         if range !== nothing && !(len in range)
             return false
         end
@@ -128,7 +128,6 @@ Check whether a segment's ORFs are translatable:
 * If only the last 3 bases of the joined ORFs are not a stop codon, return `false`.
 """
 function isok_translatable(data::SegmentData)::Bool
-    aa_sequence = LongAminoAcidSeq()
     nt_sequence = LongDNASeq()
     for protein in data.proteins
         if any(last(orf) > length(data.seq) for orf in protein.orfs)
@@ -138,7 +137,7 @@ function isok_translatable(data::SegmentData)::Bool
 
         # Must have a length divisible by 3
         iszero(length(nt_sequence) % 3) || return false
-        BioSequences.translate!(aa_sequence, nt_sequence)
+        aa_sequence = BioSequences.translate(nt_sequence)
         stop_pos = findfirst(AA_Term, aa_sequence)
 
         # Must have a stop exactly at the end, nowhere else
