@@ -168,6 +168,9 @@ Parse NCBI records from the paths of four files: The cleaned "genomeset.dat"
 output of `clean_genomeset`, "influenza.fna.gz", "influenza_aa.dat.gz" and
 "influenza.dat.gz".
 Return a `Dict{String, SegmentData}` with keys being the accession number.
+
+Note that minimal filtering is done on the records. You may want to filter for
+`isok_all(::Record)` to keep only those that pass all checks.
 """
 function parse_ncbi_records(
     genomeset::String,
@@ -191,21 +194,31 @@ function parse_ncbi_records(
 end
 
 """
-    run_all(dir::AbstractString)
+    run_all(dir::AbstractString, split_dedup=true)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
 then cleans the genomeset, then parses the records, filters them, deduplicate them,
 and serialize both all records and the deduplicated ones, as well as writes FASTA
 files to the directory.
 
-The executable `cd_hit_est` must be in the Julia PATH
+If `split_dedup`, split the deduplicated files to one file per segment.
+
+The executable `cd_hit_est` must be in the Julia PATH.
 """
-function run_all(dir::AbstractString)
+function run_all(dir::AbstractString, split_dedup::Bool=true)
+    Reference = Influenza.Reference
     println("Downloading...")
     download_influenza_data(dir)
     
     println("Cleaning genomeset.dat.gz...")
-    clean_genomeset("$dir/genomeset.clean.dat", "$dir/genomeset.dat.gz")
+    cleaned_path = "$dir/genomeset.clean.dat.gz"
+    if !isfile(cleaned_path)
+        open(GzipDecompressorStream, "$dir/genomeset.dat.gz") do inio
+            open(GzipCompressorStream, cleaned_path, "w") do outio
+                clean_genomeset(outio, inio)
+            end
+        end
+    end
 
     println("Parsing records...")
     data = parse_ncbi_records(
@@ -221,13 +234,20 @@ function run_all(dir::AbstractString)
     end
 
     println("Deduplicating...")
-    (dedup, path) = cd_hit_deduplicate_all(data)
+    (dedup, _) = cd_hit_deduplicate_all(data)
     
     println("Serializing")
-    references = Influenza.Reference.(values(data))
-    store_references("$dir/records", references, true)
-    dedup_refs = Influenza.Reference.(values(dedup))
-    store_references("$dir/deduplicated", dedup_refs, true)
+    files = Dict("all" => Reference.(values(data)))
+    if split_dedup
+        for v in values(dedup)
+            push!(get!(Vector{Reference}, files, string(v.segment)), Reference(v))
+        end
+    else
+        files["dedup"] = Reference.(values(dedup))
+    end
+    for (basename, refs) in files
+        store_references("$dir/$basename", refs, true)
+    end
     println("Done!")
 end
 

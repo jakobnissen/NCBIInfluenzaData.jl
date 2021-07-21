@@ -64,7 +64,7 @@ end
 
 function run_cd_hit(path::AbstractString)
     outfile = path * ".cdhit"
-    command = `cd-hit-est -i $path -o $outfile -aS 0.9 -c 0.95 -d 32`
+    command = `cd-hit-est -i $path -o $outfile -aS 0.9 -c 0.93 -d 32`
     pipe = pipeline(command, stdout="$path.log")
     run(pipe)
     return outfile
