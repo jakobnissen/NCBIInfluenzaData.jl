@@ -164,7 +164,7 @@ include("clustering.jl")
 """
     parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat)
 
-Parse NCBI records from the paths of four files: The cleaned "genomeset.dat"
+Parse NCBI records from the paths of four files: The cleaned "genomeset.dat.gz"
 output of `clean_genomeset`, "influenza.fna.gz", "influenza_aa.dat.gz" and
 "influenza.dat.gz".
 Return a `Dict{String, SegmentData}` with keys being the accession number.
@@ -178,7 +178,7 @@ function parse_ncbi_records(
     influenza_aa_dat::String,
     influenza_dat::String
 )
-    dict = parse_cleaned_genomeset(genomeset)
+    dict = open(parse_cleaned_genomeset, GzipDecompressorStream, genomeset)
     add_sequences!(dict, fasta)
     add_orfs!(dict, influenza_aa_dat, influenza_dat)
 
@@ -194,7 +194,7 @@ function parse_ncbi_records(
 end
 
 """
-    run_all(dir::AbstractString, split_dedup=true)
+    run_all(dir::AbstractString, split_dedup=false)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
 then cleans the genomeset, then parses the records, filters them, deduplicate them,
@@ -205,14 +205,14 @@ If `split_dedup`, split the deduplicated files to one file per segment.
 
 The executable `cd_hit_est` must be in the Julia PATH.
 """
-function run_all(dir::AbstractString, split_dedup::Bool=true)
+function run_all(dir::AbstractString)
     Reference = Influenza.Reference
     println("Downloading...")
-    download_influenza_data(dir)
+    @time download_influenza_data(dir)
     
     println("Cleaning genomeset.dat.gz...")
     cleaned_path = "$dir/genomeset.clean.dat.gz"
-    if !isfile(cleaned_path)
+    @time if !isfile(cleaned_path)
         open(GzipDecompressorStream, "$dir/genomeset.dat.gz") do inio
             open(GzipCompressorStream, cleaned_path, "w") do outio
                 clean_genomeset(outio, inio)
@@ -221,33 +221,22 @@ function run_all(dir::AbstractString, split_dedup::Bool=true)
     end
 
     println("Parsing records...")
-    data = parse_ncbi_records(
-        "$dir/genomeset.clean.dat",
+    @time data = parse_ncbi_records(
+        "$dir/genomeset.clean.dat.gz",
         "$dir/influenza.fna.gz",
         "$dir/influenza_aa.dat.gz",
         "$dir/influenza.dat.gz",
     )
     
     println("Filtering records...")
-    filter!(data) do (k, v)
+    @time filter!(data) do (k, v)
         isok_all(v)
     end
 
     println("Deduplicating...")
-    (dedup, _) = cd_hit_deduplicate_all(data)
-    
-    println("Serializing")
-    files = Dict("all" => Reference.(values(data)))
-    if split_dedup
-        for v in values(dedup)
-            push!(get!(Vector{Reference}, files, string(v.segment)), Reference(v))
-        end
-    else
-        files["dedup"] = Reference.(values(dedup))
-    end
-    for (basename, refs) in files
-        store_references("$dir/$basename", refs, true)
-    end
+    (dedup, path) = @time cd_hit_deduplicate_all(data)
+
+    return (data, dedup, path)
     println("Done!")
 end
 
