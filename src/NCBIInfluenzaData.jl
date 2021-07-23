@@ -76,9 +76,10 @@ function download_influenza_data(dst_dir::AbstractString; force::Bool=false)
         "genomeset.dat.gz",
         "influenza.dat.gz",
         "influenza.fna.gz",
-        "influenza_aa.dat.gz"
+        "influenza_aa.dat.gz",
+        "ANNOTATION/blastDB.fasta"
         ]
-        dstpath = joinpath(dst_dir, filename)
+        dstpath = joinpath(dst_dir, basename(filename))
         if !isfile(dstpath) || force
             Downloads.download(joinpath(ftp_address, filename), dstpath)
         end
@@ -194,14 +195,13 @@ function parse_ncbi_records(
 end
 
 """
-    run_all(dir::AbstractString, split_dedup=false)
+    run_all(dir::AbstractString)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
-then cleans the genomeset, then parses the records, filters them, deduplicate them,
-and serialize both all records and the deduplicated ones, as well as writes FASTA
-files to the directory.
+then cleans the genomeset, then parses the records, filters them, deduplicate them.
 
-If `split_dedup`, split the deduplicated files to one file per segment.
+Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
+`identifier => SegmentData`, and `path` the directory where CD-HIT ran.
 
 The executable `cd_hit_est` must be in the Julia PATH.
 """

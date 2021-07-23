@@ -32,3 +32,44 @@ function add_sequences!(segment_data::Dict{String, IncompleteSegmentData}, path:
         add_sequences!(segment_data, io)
     end
 end
+
+function parse_annotation_refs(
+    io::IO,
+    jls_path::AbstractString,
+    fna_path::AbstractString
+)::Vector{Reference}
+    # First load to Assembly
+    reader = FASTA.Reader(io)
+    asms = Influenza.Assembly[]
+    for record in reader
+        id = FASTA.identifier(record)
+        isnothing(id) && error("No identifier in record")
+        # Skip inf C
+        if (m = match(r"^([C])-seg([1-7])$", id); m) !== nothing # Inf C
+            continue
+        elseif (m = match(r"^([AB])-seg([1-8])(?:_([HN]\d+))?$", id); m) !== nothing # A/B
+            species = something(m[1])
+            segment = Segment(parse(UInt8, something(m[2])) - 1)
+            suffix = if (s = m[3]; s) !== nothing
+                @assert segment === (first(s) === 'H' ? Segments.HA : Segments.NA)
+                s
+            else    
+                ""
+            end
+            name = species * suffix * '_' * string(segment)
+            push!(asms, Influenza.Assembly(name, FASTA.sequence(LongDNASeq, record)))
+        else
+            error("Cannot parse header: \"", id, "\"")
+        end
+    end
+    alnasms = map(unwrap, annotate(asms, jls_path, fna_path))
+    return map(alnasms) do alnasm
+        prots = map(alnasm.proteins) do protein
+            Influenza.ReferenceProtein(
+                protein.variant,
+                unwrap(protein.orfs)
+            )
+        end::Vector{Influenza.ReferenceProtein}
+        Reference(alnasm.assembly.name, alnasm.reference.segment, alnasm.assembly.seq, prots)
+    end
+end
