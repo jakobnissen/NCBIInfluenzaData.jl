@@ -125,7 +125,8 @@ Check whether a segment's ORFs are translatable:
 * If the segment does not have a sequence or any ORFS, return `false`.
 * If any ORF exceed past the segment sequence, return `false`
 * If the joined ORFs' length is not divisible by 3, return `false`
-* If only the last 3 bases of the joined ORFs are not a stop codon, return `false`.
+* If any stops in sequence, return `false`.
+* If sequence is not followed by a stop codon, return false
 """
 function isok_translatable(data::SegmentData)::Bool
     nt_sequence = LongDNASeq()
@@ -135,13 +136,19 @@ function isok_translatable(data::SegmentData)::Bool
         end
         join!(nt_sequence, (@view(data.seq[orf]) for orf in protein.orfs))
 
-        # Must have a length divisible by 3
-        iszero(length(nt_sequence) % 3) || return false
+        # Must have a nonzerolength divisible by 3
+        (length(nt_sequence) > 2 || iszero(length(nt_sequence) % 3)) || return false
         aa_sequence = BioSequences.translate(nt_sequence)
-        stop_pos = findfirst(AA_Term, aa_sequence)
 
-        # Must have a stop exactly at the end, nowhere else
-        stop_pos == lastindex(aa_sequence) || return false
+        # Must not contain stop
+        findfirst(AA_Term, aa_sequence) === nothing || return false
+
+        # There must be a stop just after the seq
+        lastpos = protein.orfs[end][end]
+        stoprange = lastpos+1:lastpos+3
+        checkbounds(Bool, eachindex(data.seq), stoprange) || return false
+        stopseq = data.seq[stoprange]
+        (all(!isambiguous, stopseq) && Influenza.is_stop(DNACodon(stopseq))) || return false
     end
     return true
 end

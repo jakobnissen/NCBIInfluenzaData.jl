@@ -55,12 +55,26 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
                 break
             end
             variant = accession_protein_map[protein_accession]
-            orfs = parse_orf_field(orf_field)
-            if is_error(orfs)
+            m_orfs = parse_orf_field(orf_field)
+            if is_error(data.seq) || is_error(m_orfs)
                 is_bad = true
                 break
             end
-            push!(proteinbuffer, ReferenceProtein(variant, unwrap(orfs)))
+
+            orfs, seq = unwrap(m_orfs), unwrap(data.seq)
+
+            # NCBI includes stop codon in the ORF. I don't. So if the last three bases
+            # of the ORF is a stop, remove them from the ORF
+            if (
+                !isempty(orfs) &&
+                length(last(orfs)) > 2 &&
+                checkbounds(Bool, eachindex(seq), last(orfs)) &&
+                all(!isambiguous, seq[last(orfs)]) &&
+                Influenza.is_stop(DNACodon(seq[last(orfs)]))
+            )
+                orfs[end] = first(orfs[end]):last(orfs[end])-3
+            end
+            push!(proteinbuffer, ReferenceProtein(variant, orfs))
         end
         if !is_bad
             resize!(data.proteins, length(proteinbuffer))
