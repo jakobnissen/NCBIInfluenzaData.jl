@@ -64,15 +64,20 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
             orfs, seq = unwrap(m_orfs), unwrap(data.seq)
 
             # NCBI includes stop codon in the ORF. I don't. So if the last three bases
-            # of the ORF is a stop, remove them from the ORF
+            # of the ORF is a stop, remove them from the ORF.
+            # We assume last ORF is 3 bp in length
             if (
                 !isempty(orfs) &&
-                length(last(orfs)) > 2 &&
-                checkbounds(Bool, eachindex(seq), last(orfs)) &&
-                all(!isambiguous, seq[last(orfs)]) &&
-                Influenza.is_stop(DNACodon(seq[last(orfs)]))
+                length(last(orfs)) > 3
             )
-                orfs[end] = first(orfs[end]):last(orfs[end])-3
+                range = last(orfs)[end-2:end]
+                if (
+                    checkbounds(Bool, eachindex(seq), range) &&
+                    all(!isambiguous, seq[range]) &&
+                    Influenza.is_stop(DNACodon(seq[range]))
+                )
+                    orfs[end] = orfs[end][1:end-3]
+                end
             end
             push!(proteinbuffer, ReferenceProtein(variant, orfs))
         end
@@ -137,8 +142,11 @@ with both ORFs and sequence, since it modifies both the sequence and ORFs.
 function strip_false_termini!(data::Dict{String, IncompleteSegmentData})
     toremove = Set{String}() # we remove these keys
     n_stripped = 0
+    fwquery = ApproximateSearchQuery(dna"AGCAAAAGCAGG", :forward)
+    rvquery = ApproximateSearchQuery(dna"CTTGTTTCTCCT", :backward)
+
     for (id, segment_data) in data
-        result = strip_false_termini!(segment_data)
+        result = strip_false_termini!(segment_data, fwquery, rvquery)
         n_stripped += @unwrap_or result begin
             push!(toremove, id)
             continue
@@ -154,9 +162,13 @@ end
 
 # Returns some(true/false), whether data was stripped off, and none if
 # the ORF goes into the stripped termini, and the sequence must be discarded
-function strip_false_termini!(data::IncompleteSegmentData)::Option{Bool}
+function strip_false_termini!(
+    data::IncompleteSegmentData,
+    fwquery::ApproximateSearchQuery,
+    bwquery::ApproximateSearchQuery,
+)::Option{Bool}
     is_error(data.seq) && return some(false)
-    false_termini = false_termini_length(data)
+    false_termini = false_termini_length(data, fwquery, bwquery)
     false_termini === nothing && return some(false)
     trim5, trim3 = false_termini
     iszero(trim5) && iszero(trim3) && return some(false)
@@ -179,23 +191,23 @@ function strip_false_termini!(data::IncompleteSegmentData)::Option{Bool}
 end
 
 # We allow to strip up to 100 bp in each end off
-function false_termini_length(data::IncompleteSegmentData)::Union{Nothing, Tuple{UInt32, UInt32}}
+function false_termini_length(
+    data::IncompleteSegmentData,
+    fwquery::ApproximateSearchQuery,
+    bwquery::ApproximateSearchQuery,
+)::Union{Nothing, Tuple{UInt32, UInt32}}
     seq = @unwrap_or data.seq (return nothing)
     trim5, trim3 = UInt32(0), UInt32(0)
     # Find true beginning of sequence, if it's within first 100 bp
-    p = approxsearch(seq, dna"AGCAAAAGCAGG", 1)
+    SEARCHLEN = 100
+    p = approxsearch(seq, fwquery, 1, 1, SEARCHLEN)
     if !isempty(p)
-        if first(p) < 100
-            trim5 = UInt32(first(p) - 1)
-        end
+        trim5 = UInt32(first(p) - 1)
     end
     # Find true end of sequence
-    p = approxrsearch(seq, dna"CTTGTTTCTCCT", 1)
+    p = approxrsearch(seq, bwquery, 1, lastindex(seq), lastindex(seq)-SEARCHLEN)
     if !isempty(p)
         trim3 = UInt32(lastindex(seq) - last(p))
-        if trim3 > 100
-            trim3 = UInt32(0)
-        end
     end
     return (trim5, trim3)
 end

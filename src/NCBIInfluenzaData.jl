@@ -8,6 +8,7 @@ It has been confirmed to work with the NCBI data of 2020-10-13
 """
 module NCBIInfluenzaData
 
+using BioSequences: checkbounds
 using BioSequences
 using CodecZlib
 using ErrorTypes
@@ -195,6 +196,19 @@ function parse_ncbi_records(
 end
 
 """
+Checks the presence of the cd_hit executable.
+"""
+function check_cd_hit()
+    try
+        process = run(`cd-hit-est`, wait=false)
+        wait(process)
+        return true
+    catch IOError
+        return false
+    end
+end
+
+"""
     run_all(dir::AbstractString)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
@@ -206,6 +220,9 @@ Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
 The executable `cd_hit_est` must be in the Julia PATH.
 """
 function run_all(dir::AbstractString)
+    if !check_cd_hit()
+        error("Command `cd-hit-est` could not be executed")
+    end
     Reference = Influenza.Reference
     println("Downloading...")
     @time download_influenza_data(dir)

@@ -1,7 +1,7 @@
 name = "NCBIInfluenzaData"
 uuid = "7ee4cdc4-8348-4b3e-96a1-d8fae3cd589d"
 authors = ["Jakob Nybo Nissen <jakobnybonissen@gmail.com>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 BioSequences = "7e6ae17a-c86d-528c-b3b9-7f778a29fe59"
