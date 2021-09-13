@@ -157,8 +157,9 @@ end
 
 function parse_cleaned_genomeset(io::IO)::Dict{String, IncompleteSegmentData}
     result = Dict{String, IncompleteSegmentData}()
+    buffer = Vector{SubString{String}}(undef, 11)
     for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
-        data = @unwrap_or try_parse(IncompleteSegmentData, line) continue
+        data = @unwrap_or try_parse(IncompleteSegmentData, buffer, line) continue
         gi = data.id
         @assert !haskey(result, gi) "GB identifier $(gi) not unique"
         result[gi] = data

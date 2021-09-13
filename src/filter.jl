@@ -11,10 +11,22 @@ Check if the `SegmentData` passes all criteria. Checks:
 """
 function isok_all(data::SegmentData)::Bool
     count(isambiguous, data.seq) < 5 &&
+    isok_segment_label(data)
     isok_minimum_proteins(data) &&
     isok_seq_length(data) &&
     isok_orf_length(data) &&
     isok_translatable(data)
+end
+
+"""
+    isok_segment_label(::SegmentData)
+
+Check whether a `SegmentData`'s DNA and protein variant is consistent, i.e. no PB2
+protein in a PB1 segment. This may happen when segments gets mislabeled, e.g. 
+KT853292.1 is labeled "segment 2", but is PB2 (segment 1).
+"""
+function isok_segment_label(data::SegmentData)::Bool
+    all(p -> source(p.var) == data.segment, data.proteins)
 end
 
 """
