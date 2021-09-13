@@ -219,8 +219,8 @@ Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
 
 The executable `cd_hit_est` must be in the Julia PATH.
 """
-function run_all(dir::AbstractString)
-    if !check_cd_hit()
+function run_all(dir::AbstractString, deduplicate=true)
+    if deduplicate && !check_cd_hit()
         error("Command `cd-hit-est` could not be executed")
     end
     Reference = Influenza.Reference
@@ -250,11 +250,14 @@ function run_all(dir::AbstractString)
         isok_all(v)
     end
 
-    println("Deduplicating...")
-    (dedup, path) = @time cd_hit_deduplicate_all(data)
-
-    return (data, dedup, path)
+    println("Optionally deduplicating...")
+    @time dupresult = if deduplicate
+        (dedup, path) = cd_hit_deduplicate_all(data)
+    else
+        nothing
+    end
     println("Done!")
+    return (data, dupresult)
 end
 
 end # module
