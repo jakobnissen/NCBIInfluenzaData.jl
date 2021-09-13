@@ -1,7 +1,7 @@
 name = "NCBIInfluenzaData"
 uuid = "7ee4cdc4-8348-4b3e-96a1-d8fae3cd589d"
 authors = ["Jakob Nybo Nissen <jakobnybonissen@gmail.com>"]
-version = "0.3.1"
+version = "0.3.2"
 
 [deps]
 BioSequences = "7e6ae17a-c86d-528c-b3b9-7f778a29fe59"
@@ -11,5 +11,4 @@ ErrorTypes = "7f495686-c6d2-4c77-9e8e-e4c865675f9d"
 FASTX = "c2308a5c-f048-11e8-3e8a-31650f418d12"
 Influenza = "094bb4ec-04e4-4f11-bf12-e5749f7dd418"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-Transducers = "28d57a85-8fef-5791-bfe6-a80928e7c999"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"

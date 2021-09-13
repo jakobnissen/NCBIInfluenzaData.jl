@@ -12,14 +12,16 @@ using BioSequences: checkbounds
 using BioSequences
 using CodecZlib
 using ErrorTypes
-using FASTX 
+using FASTX
 using Serialization
-using Transducers
 using UnicodePlots
 using Influenza
 import Downloads
 
 import Influenza: ReferenceProtein
+
+imap(f) = x -> Iterators.map(f, x)
+ifilter(f) = x -> Iterators.filter(f, x)
 
 function try_split!(
     v::Vector{SubString{String}},
@@ -226,7 +228,7 @@ function run_all(dir::AbstractString, deduplicate=true)
     Reference = Influenza.Reference
     println("Downloading...")
     @time download_influenza_data(dir)
-    
+
     println("Cleaning genomeset.dat.gz...")
     cleaned_path = "$dir/genomeset.clean.dat.gz"
     @time if !isfile(cleaned_path)
@@ -244,7 +246,7 @@ function run_all(dir::AbstractString, deduplicate=true)
         "$dir/influenza_aa.dat.gz",
         "$dir/influenza.dat.gz",
     )
-    
+
     println("Filtering records...")
     @time filter!(data) do (k, v)
         isok_all(v)

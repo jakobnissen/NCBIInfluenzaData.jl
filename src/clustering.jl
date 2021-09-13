@@ -54,8 +54,8 @@ function cd_hit_deduplicate(
     # Read results to vector
     ids = open(cd_path) do io
         eachline(io) |>
-        Filter(x -> startswith(x, '>')) ⨟
-        Map(x -> String(strip(x)[2:end])) |>
+        ifilter(x -> startswith(x, '>')) |>
+        imap(x -> String(strip(x)[2:end])) |>
         collect
     end
 

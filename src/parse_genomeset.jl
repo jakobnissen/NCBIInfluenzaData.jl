@@ -5,17 +5,17 @@
     clean_genomeset(outio::IO, inio::IO)
 
 Reads in data from `inio`, representing the decompressed data of "genomeset.dat.gz"
-and write a cleaned copy to `outio`. The cleaning process renames mistyped or invalid data. 
+and write a cleaned copy to `outio`. The cleaning process renames mistyped or invalid data.
 
 Because it is implemented by manually correcting each observed mistake,
-this function may fail, or incompletely clean the data in future versions of 
+this function may fail, or incompletely clean the data in future versions of
 the NCBI Influenza data. In that case, you can assume that parsing incompletely
 cleaned data will fail, and not parse invalid data.
 """
 function clean_genomeset(outio::IO, inio::IO)
     fields = Vector{SubString{String}}(undef, 11)
 
-    for line in eachline(inio) |> Map(strip) ⨟ Filter(!isempty)
+    for line in eachline(inio) |> imap(strip) |> ifilter(!isempty)
         # Check the correct number of fields
         if unwrap_or(try_split!(fields, line, '\t'), 0) < 11
             error("Error: Should have 11 fields \"$line\"")
@@ -56,7 +56,7 @@ function clean_genomeset(outio::IO, inio::IO)
             ""
         else
             year
-        end 
+        end
 
         println(outio, join([gi, host, segment, subtype, country, year, len, isolate, age, gender, group], '\t'))
     end
@@ -158,10 +158,12 @@ end
 function parse_cleaned_genomeset(io::IO)::Dict{String, IncompleteSegmentData}
     result = Dict{String, IncompleteSegmentData}()
     buffer = Vector{SubString{String}}(undef, 11)
-    for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
+    for line in eachline(io) |> imap(strip) |> ifilter(!isempty)
         data = @unwrap_or try_parse(IncompleteSegmentData, buffer, line) continue
         gi = data.id
-        @assert !haskey(result, gi) "GB identifier $(gi) not unique"
+        if haskey(result, gi)
+            error("GB identifier $(gi) not unique")
+        end
         result[gi] = data
     end
     result

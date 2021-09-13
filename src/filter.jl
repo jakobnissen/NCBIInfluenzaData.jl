@@ -2,8 +2,8 @@
     isok_all(::SegmentData)
 
 Check if the `SegmentData` passes all criteria. Checks:
-* Segment has a sequence
 * Segment has less than 5 ambiguous bases
+* `isok_segment_label`
 * `isok_minimum_proteins`
 * `isok_seq_length` (inf A only, skipped for B)
 * `isok_orf_length` (inf A only, skipped for B)
@@ -121,7 +121,7 @@ function isok_orf_length(data::SegmentData)::Bool
     is_error(data.serotype) && return true
     
     for protein in data.proteins
-        len = sum(length, protein.orfs)
+        len = sum(length, protein.orfs, init=0)
         range = ACCEPTABLE_ORF_LENGTHS[protein.var]
         if range !== nothing && !(len in range)
             return false
@@ -166,7 +166,7 @@ function isok_translatable(data::SegmentData)::Bool
 end
 
 function join!(seq::BioSequence, it)
-    len = sum(length, it)
+    len = sum(length, it, init=0)
     length(seq) != len && resize!(seq, len)
     offset = 0
     for i in it

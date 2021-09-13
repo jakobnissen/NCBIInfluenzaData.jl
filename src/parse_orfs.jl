@@ -24,11 +24,15 @@ end
 # Parse the inf_aa file and get a map from accession => protein
 function parse_inf_aa(io::IO)::Dict{String, Protein}
     result = Dict{String, Protein}()
-    for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
-        fields = split(line, '\t')
+    fields = Vector{SubString{String}}(undef, 11)
+    for line in eachline(io) |> ifilter(ln -> !isempty(strip(ln)))
+        nfields = try_split!(fields, line, '\t')
+        if unwrap_or(nfields, 0) != 11
+            error("Expected 11 fields, got", line)
+        end
         accession = first(fields)
         variant = @unwrap_or try_parse(Protein, fields[3]) continue
-        @assert !haskey(result, accession) "Duplicate key $accession"
+        haskey(result, accession) && error("Duplicate key $accession")
         result[accession] = variant
     end
     result
@@ -37,16 +41,17 @@ end
 function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_protein_map::Dict{String, Protein}, io::IO)
     n_updates = 0
     proteinbuffer = ReferenceProtein[]
-    for line in eachline(io) |> Map(strip) ⨟ Filter(!isempty)
-        fields = split(line, '\t')
+    fields = Vector{SubString{String}}(undef, 128)
+    for line in eachline(io) |> imap(strip) |> ifilter(!isempty)
+        nfields = unwrap(try_split!(fields, line, '\t'))
+        isodd(nfields) || error("Must be an odd-numbered fields")
         gb_accession = first(fields)
         haskey(segment_data, gb_accession) || continue
-        @assert isodd(length(fields))
         data = segment_data[gb_accession]
         n_updates += 1
         is_bad = false
         empty!(proteinbuffer)
-        for (protein_accession, orf_field) in zip(@view(fields[2:2:end]), @view(fields[3:2:end]))
+        for (protein_accession, orf_field) in zip(@view(fields[2:2:nfields]), @view(fields[3:2:nfields]))
 
             # For some reason, some of these protein accessions are not actually present
             # in the influenza_aa.dat file.
@@ -88,7 +93,7 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
     end
     return n_updates
 end
-        
+
 function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{UnitRange{UInt32}}}
     # If it looks like gb|AB266090:<411->632, the ORF is not present
     # in the reference, and we skip it
@@ -108,7 +113,7 @@ function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{Uni
     result = map(parse_range, orfstrings)
 
     # Return none if it's not divisible by three and thus cant be ORF
-    iszero(sum(length, result) % 3) || return none
+    iszero(sum(length, result, init=0) % 3) || return none
     some(result)
 end
 
