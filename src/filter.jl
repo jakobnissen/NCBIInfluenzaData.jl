@@ -11,7 +11,7 @@ Check if the `SegmentData` passes all criteria. Checks:
 """
 function isok_all(data::SegmentData)::Bool
     count(isambiguous, data.seq) < 5 &&
-    isok_segment_label(data)
+    isok_segment_label(data) &&
     isok_minimum_proteins(data) &&
     isok_seq_length(data) &&
     isok_orf_length(data) &&
