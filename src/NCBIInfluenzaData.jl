@@ -184,7 +184,7 @@ function parse_ncbi_records(
     add_orfs!(dict, influenza_aa_dat, influenza_dat)
 
     # Now filter away any segments without seqs or orfs
-    filter!(dict) do (k, v)
+    filter!(dict) do (_, v)
         !is_error(v.seq) && !isempty(v.proteins)
     end
 

@@ -1,7 +1,17 @@
+# Some segments appear good when checking the quality, 
+const IDENTIFIERS_BAD = Set([
+    # These three come from the same lab, and I have a strong suspicion they
+    # are chimeric assemblies - there is recombination at pos ~230
+    "MK168420",
+    "MK168525",
+    "MK168545",
+])
+
 """
     isok_all(::SegmentData)
 
 Check if the `SegmentData` passes all criteria. Checks:
+* It's not a known bad segment
 * Segment has less than 5 ambiguous bases
 * `isok_segment_label`
 * `isok_minimum_proteins`
@@ -10,6 +20,7 @@ Check if the `SegmentData` passes all criteria. Checks:
 * `isok_translatable`
 """
 function isok_all(data::SegmentData)::Bool
+    !in(data.id, IDENTIFIERS_BAD) &&
     count(BioSequences.isambiguous, data.seq) < 5 &&
     isok_segment_label(data) &&
     isok_minimum_proteins(data) &&
