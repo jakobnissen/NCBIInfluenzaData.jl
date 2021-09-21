@@ -1,5 +1,6 @@
 # This file contains code to add extra records using annotation.tbl and
 # a FASTA file.
+#=
 """
     NCBIInfluenzaData.Extra
 
@@ -297,3 +298,4 @@ function parse_data_from_header(header::String, deduplicate::Bool)::SegmentData
         RefValue(none(LongDNASeq))
     )
 end
+=#

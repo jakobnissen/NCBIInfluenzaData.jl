@@ -8,14 +8,11 @@ It has been confirmed to work with the NCBI data of 2020-10-13
 """
 module NCBIInfluenzaData
 
-using BioSequences: checkbounds
-using BioSequences
-using CodecZlib
-using ErrorTypes
-using FASTX
-using Serialization
-using UnicodePlots
-using Influenza
+using BioSequences: BioSequences, BioSequence, LongDNASeq, @dna_str, AA_Term
+using CodecZlib: GzipCompressorStream, GzipDecompressorStream
+using ErrorTypes: Option, none, some, unwrap, unwrap_or, @unwrap_or, is_error, @?
+using FASTX: FASTA
+using Influenza: Influenza, Protein, Segment, SeroType, Segments, Proteins, source
 import Downloads
 
 import Influenza: ReferenceProtein
@@ -205,7 +202,7 @@ function check_cd_hit()
         process = run(`cd-hit-est`, wait=false)
         wait(process)
         return true
-    catch IOError
+    catch e
         return false
     end
 end
@@ -225,7 +222,6 @@ function run_all(dir::AbstractString, deduplicate=true)
     if deduplicate && !check_cd_hit()
         error("Command `cd-hit-est` could not be executed")
     end
-    Reference = Influenza.Reference
     println("Downloading...")
     @time download_influenza_data(dir)
 

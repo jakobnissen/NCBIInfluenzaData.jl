@@ -78,8 +78,8 @@ function add_orfs!(segment_data::Dict{String, IncompleteSegmentData}, accession_
                 range = last(orfs)[end-2:end]
                 if (
                     checkbounds(Bool, eachindex(seq), range) &&
-                    all(!isambiguous, seq[range]) &&
-                    Influenza.is_stop(DNACodon(seq[range]))
+                    all(!BioSequences.isambiguous, seq[range]) &&
+                    Influenza.is_stop(BioSequences.DNACodon(seq[range]))
                 )
                     orfs[end] = orfs[end][1:end-3]
                 end
@@ -107,7 +107,6 @@ function parse_orf_field(s::Union{String, SubString{String}})::Option{Vector{Uni
     p = findfirst(isequal(':'), s1)
     p === nothing && return none
     s2 = @view s1[p+1:ncodeunits(s1)]
-    orf_strings = split(s2, ", ")
 
     orfstrings = split(s2, ", ")
     result = map(parse_range, orfstrings)
@@ -147,8 +146,8 @@ with both ORFs and sequence, since it modifies both the sequence and ORFs.
 function strip_false_termini!(data::Dict{String, IncompleteSegmentData})
     toremove = Set{String}() # we remove these keys
     n_stripped = 0
-    fwquery = ApproximateSearchQuery(dna"AGCAAAAGCAGG", :forward)
-    rvquery = ApproximateSearchQuery(dna"CTTGTTTCTCCT", :backward)
+    fwquery = BioSequences.ApproximateSearchQuery(dna"AGCAAAAGCAGG", :forward)
+    rvquery = BioSequences.ApproximateSearchQuery(dna"CTTGTTTCTCCT", :backward)
 
     for (id, segment_data) in data
         result = strip_false_termini!(segment_data, fwquery, rvquery)
@@ -169,8 +168,8 @@ end
 # the ORF goes into the stripped termini, and the sequence must be discarded
 function strip_false_termini!(
     data::IncompleteSegmentData,
-    fwquery::ApproximateSearchQuery,
-    bwquery::ApproximateSearchQuery,
+    fwquery::BioSequences.ApproximateSearchQuery,
+    bwquery::BioSequences.ApproximateSearchQuery,
 )::Option{Bool}
     is_error(data.seq) && return some(false)
     false_termini = false_termini_length(data, fwquery, bwquery)
@@ -198,19 +197,19 @@ end
 # We allow to strip up to 100 bp in each end off
 function false_termini_length(
     data::IncompleteSegmentData,
-    fwquery::ApproximateSearchQuery,
-    bwquery::ApproximateSearchQuery,
+    fwquery::BioSequences.ApproximateSearchQuery,
+    bwquery::BioSequences.ApproximateSearchQuery,
 )::Union{Nothing, Tuple{UInt32, UInt32}}
     seq = @unwrap_or data.seq (return nothing)
     trim5, trim3 = UInt32(0), UInt32(0)
     # Find true beginning of sequence, if it's within first 100 bp
     SEARCHLEN = 100
-    p = approxsearch(seq, fwquery, 1, 1, SEARCHLEN)
+    p = BioSequences.approxsearch(seq, fwquery, 1, 1, SEARCHLEN)
     if !isempty(p)
         trim5 = UInt32(first(p) - 1)
     end
     # Find true end of sequence
-    p = approxrsearch(seq, bwquery, 1, lastindex(seq), lastindex(seq)-SEARCHLEN)
+    p = BioSequences.approxrsearch(seq, bwquery, 1, lastindex(seq), lastindex(seq)-SEARCHLEN)
     if !isempty(p)
         trim3 = UInt32(lastindex(seq) - last(p))
     end
