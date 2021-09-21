@@ -132,50 +132,59 @@ function parse_range(s::AbstractString)::UnitRange{UInt32}
 end
 
 """
-    strip_false_termini!(data::Dict{String, IncompleteSegmentData})
+    strip_false_termini!(data::Dict{String, IncompleteSegmentData}, filter_termini=true)
 
 Some sequences given by NCBI are too long, containing linker or primer contamination.
 True influenza sequences begin with AGCAAAAGCAGG and ends with CTTGTTTCTACT. These
 termini are highly conserved, but may have a single substitution.
 We can allow sequences that do not include these noncoding ends, but we cannot
 allow artifacts flanking the true termini.
+If `filter_termini`, remove sequences where the termini cannot be found within the
+first/last few basepairs using approximate sequence search.
 
 This function must be called on completely initialized `IncompleteSegmentData`
 with both ORFs and sequence, since it modifies both the sequence and ORFs.
 """
-function strip_false_termini!(data::Dict{String, IncompleteSegmentData})
-    toremove = Set{String}() # we remove these keys
-    n_stripped = 0
+function strip_false_termini!(
+    data::Dict{String, IncompleteSegmentData},
+    filter_termini::Bool
+)
     fwquery = BioSequences.ApproximateSearchQuery(dna"AGCAAAAGCAGG", :forward)
     rvquery = BioSequences.ApproximateSearchQuery(dna"CTTGTTTCTCCT", :backward)
+    good = Set{String}()
 
     for (id, segment_data) in data
-        result = strip_false_termini!(segment_data, fwquery, rvquery)
-        n_stripped += @unwrap_or result begin
-            push!(toremove, id)
+        seq = @unwrap_or segment_data.seq begin
             continue
         end
-    end
-    if !iszero(length(toremove))
-        filter!(data) do (k, v)
-            !in(k, toremove)
+        fiveprime, threeprime = false_termini_length(seq, fwquery, rvquery)
+
+        # We discard something like 93% of all seqs here
+        if fiveprime === nothing || threeprime === nothing
+            if filter_termini
+                continue
+            else
+                fiveprime = fiveprime === nothing ? 0 : fiveprime
+                threeprime = threeprime === nothing ? 0 : threeprime
+            end
         end
+        isgood = strip_false_termini!(segment_data, fiveprime, threeprime)
+        isgood && push!(good, id)
     end
-    return (n_stripped, length(toremove))
+
+    filter!(data) do (k, _)
+        k in good
+    end
+    return data
 end
 
-# Returns some(true/false), whether data was stripped off, and none if
-# the ORF goes into the stripped termini, and the sequence must be discarded
+# Returns whether 
 function strip_false_termini!(
     data::IncompleteSegmentData,
-    fwquery::BioSequences.ApproximateSearchQuery,
-    bwquery::BioSequences.ApproximateSearchQuery,
-)::Option{Bool}
-    is_error(data.seq) && return some(false)
-    false_termini = false_termini_length(data, fwquery, bwquery)
-    false_termini === nothing && return some(false)
-    trim5, trim3 = false_termini
-    iszero(trim5) && iszero(trim3) && return some(false)
+    fiveprime::UInt32,
+    threeprime::UInt32,
+)::Bool
+    iszero(fiveprime) && iszero(threeprime) && return true
     seqlen = UInt32(length(unwrap(data.seq)))
 
     # For safety, error if there are no ORFs. This function should not be called
@@ -183,35 +192,34 @@ function strip_false_termini!(
     isempty(data.proteins) && error("Termini must be stripped after adding ORFs to data")
 
     # Trim sequence and ORFs.
-    data.seq = some(unwrap(data.seq)[trim5+1:seqlen-trim3])
+    data.seq = some(unwrap(data.seq)[fiveprime+1:seqlen-threeprime])
     for (proti, protein) in enumerate(data.proteins), (orfi, orf) in enumerate(protein.orfs)
-        if trim5 ≥ first(orf) || (seqlen - trim3) < last(orf)
-            return none
+        if threeprime ≥ first(orf) || (seqlen - threeprime) < last(orf)
+            return false
         else
-            data.proteins[proti].orfs[orfi] = (first(orf) - trim5):(last(orf) - trim5)
+            data.proteins[proti].orfs[orfi] = (first(orf) - fiveprime):(last(orf) - fiveprime)
         end
     end
-    return some(true)
+    return true
 end
 
 # We allow to strip up to 100 bp in each end off
+"Returns (5', 3'), where each is nothing, if no termini was found,
+or an UInt32 if one was found."
 function false_termini_length(
-    data::IncompleteSegmentData,
+    seq::LongDNASeq,
     fwquery::BioSequences.ApproximateSearchQuery,
     bwquery::BioSequences.ApproximateSearchQuery,
-)::Union{Nothing, Tuple{UInt32, UInt32}}
-    seq = @unwrap_or data.seq (return nothing)
+)::NTuple{2, Union{Nothing, UInt32}}
     trim5, trim3 = UInt32(0), UInt32(0)
-    # Find true beginning of sequence, if it's within first 100 bp
     SEARCHLEN = 100
-    p = BioSequences.approxsearch(seq, fwquery, 1, 1, SEARCHLEN)
-    if !isempty(p)
-        trim5 = UInt32(first(p) - 1)
-    end
+
+    # Find true beginning of sequence, if it's within first SEARCHLEN bp
+    p = BioSequences.approxsearch(seq, fwquery, 2, 1, SEARCHLEN)
+    trim5 = isempty(p) ? nothing : UInt32(first(p) - 1)
+
     # Find true end of sequence
-    p = BioSequences.approxrsearch(seq, bwquery, 1, lastindex(seq), lastindex(seq)-SEARCHLEN)
-    if !isempty(p)
-        trim3 = UInt32(lastindex(seq) - last(p))
-    end
+    p = BioSequences.approxrsearch(seq, bwquery, 2, lastindex(seq), lastindex(seq)-SEARCHLEN)
+    trim3 = isempty(p) ? nothing : UInt32(lastindex(seq) - last(p))
     return (trim5, trim3)
 end

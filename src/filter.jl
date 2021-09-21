@@ -20,7 +20,7 @@ Check if the `SegmentData` passes all criteria. Checks:
 * `isok_translatable`
 """
 function isok_all(data::SegmentData)::Bool
-    !in(data.id, IDENTIFIERS_BAD) &&
+    (!in(data.id, IDENTIFIERS_BAD)) &&
     count(BioSequences.isambiguous, data.seq) < 5 &&
     isok_segment_label(data) &&
     isok_minimum_proteins(data) &&
@@ -171,7 +171,7 @@ function isok_translatable(data::SegmentData)::Bool
         stoprange = lastpos+1:lastpos+3
         checkbounds(Bool, eachindex(data.seq), stoprange) || return false
         stopseq = data.seq[stoprange]
-        if all(!BioSequences.isambiguous, stopseq) && Influenza.is_stop(BioSequences.DNACodon(stopseq))
+        if any(BioSequences.isambiguous, stopseq) || !Influenza.is_stop(BioSequences.DNACodon(stopseq))
             return false
         end
     end

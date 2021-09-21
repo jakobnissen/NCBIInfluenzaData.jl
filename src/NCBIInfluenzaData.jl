@@ -163,12 +163,15 @@ include("filter.jl")
 include("clustering.jl")
 
 """
-    parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat)
+    parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat, filter_termini)
 
 Parse NCBI records from the paths of four files: The cleaned "genomeset.dat.gz"
 output of `clean_genomeset`, "influenza.fna.gz", "influenza_aa.dat.gz" and
 "influenza.dat.gz".
 Return a `Dict{String, SegmentData}` with keys being the accession number.
+
+If `filter_termini`, remove all seqs without proper termini, e.g. if only the coding
+sequence is provided.
 
 Note that minimal filtering is done on the records. You may want to filter for
 `isok_all(::Record)` to keep only those that pass all checks.
@@ -177,7 +180,8 @@ function parse_ncbi_records(
     genomeset::String,
     fasta::String,
     influenza_aa_dat::String,
-    influenza_dat::String
+    influenza_dat::String,
+    filter_termini::Bool,
 )
     dict = open(parse_cleaned_genomeset, GzipDecompressorStream, genomeset)
     add_sequences!(dict, fasta)
@@ -189,7 +193,7 @@ function parse_ncbi_records(
     end
 
     # This is a fairly slow operation, but necessary
-    strip_false_termini!(dict)
+    strip_false_termini!(dict, filter_termini)
 
     return Dict(k => SegmentData(v) for (k, v) in dict)
 end
@@ -208,7 +212,7 @@ function check_cd_hit()
 end
 
 """
-    run_all(dir::AbstractString)
+    run_all(dir::AbstractString, deduplicate=true, filter_termini=true)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
 then cleans the genomeset, then parses the records, filters them, deduplicate them.
@@ -218,7 +222,7 @@ Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
 
 The executable `cd_hit_est` must be in the Julia PATH.
 """
-function run_all(dir::AbstractString, deduplicate=true)
+function run_all(dir::AbstractString, deduplicate::Bool=true, filter_termini::Bool=true)
     if deduplicate && !check_cd_hit()
         error("Command `cd-hit-est` could not be executed")
     end
@@ -241,6 +245,7 @@ function run_all(dir::AbstractString, deduplicate=true)
         "$dir/influenza.fna.gz",
         "$dir/influenza_aa.dat.gz",
         "$dir/influenza.dat.gz",
+        filter_termini
     )
 
     println("Filtering records...")
@@ -250,7 +255,7 @@ function run_all(dir::AbstractString, deduplicate=true)
 
     println("Optionally deduplicating...")
     @time dupresult = if deduplicate
-        (dedup, path) = cd_hit_deduplicate_all(data)
+        cd_hit_deduplicate_all(data)
     else
         nothing
     end
