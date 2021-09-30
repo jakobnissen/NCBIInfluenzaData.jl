@@ -37,7 +37,7 @@ function try_split!(
             start = i + 1
         end
     end
-    @inbounds v[n+1] = SubString(s, start, ncodeunits(s))
+    @inbounds v[n+1] = SubString(s, start, lastindex(s))
     some(n + 1)
 end
 
@@ -206,7 +206,7 @@ function check_cd_hit()
         process = run(`cd-hit-est`, wait=false)
         wait(process)
         return true
-    catch e
+    catch
         return false
     end
 end
