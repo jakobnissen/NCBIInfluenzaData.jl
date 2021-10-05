@@ -164,8 +164,8 @@ function strip_false_termini!(
             if filter_termini
                 continue
             else
-                fiveprime = fiveprime === nothing ? 0 : fiveprime
-                threeprime = threeprime === nothing ? 0 : threeprime
+                fiveprime = fiveprime === nothing ? UInt32(0) : fiveprime
+                threeprime = threeprime === nothing ? UInt32(0) : threeprime
             end
         end
         isgood = strip_false_termini!(segment_data, fiveprime, threeprime)
