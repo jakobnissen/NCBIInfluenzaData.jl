@@ -8,7 +8,8 @@ It has been confirmed to work with the NCBI data of 2020-10-13
 """
 module NCBIInfluenzaData
 
-using BioSequences: BioSequences, BioSequence, LongDNASeq, @dna_str, AA_Term
+using BioSequences: BioSequences, BioSequence, LongDNASeq, @dna_str,
+    AA_Term, reverse_complement
 using CodecZlib: GzipCompressorStream, GzipDecompressorStream
 using ErrorTypes: Option, none, some, unwrap, unwrap_or, @unwrap_or, is_error, @?
 using FASTX: FASTA
@@ -171,7 +172,8 @@ output of `clean_genomeset`, "influenza.fna.gz", "influenza_aa.dat.gz" and
 Return a `Dict{String, SegmentData}` with keys being the accession number.
 
 If `filter_termini`, remove all seqs without proper termini, e.g. if only the coding
-sequence is provided.
+sequence is provided. This is set to `false` by default, as most submitted sequences
+discard the part of the sequence covered by the primers.
 
 Note that minimal filtering is done on the records. You may want to filter for
 `isok_all(::Record)` to keep only those that pass all checks.

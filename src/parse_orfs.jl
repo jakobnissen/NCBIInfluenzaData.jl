@@ -131,6 +131,55 @@ function parse_range(s::AbstractString)::UnitRange{UInt32}
     return range
 end
 
+# These sequences are subject to change. They are the conserved DNA sequences
+# at the termini of Influenza. Sequences are from DOI: 10.1128/JCM.03265-13 and
+# from our internal OneTube inf A PCR protocol.
+# The first sequence in each vector are from our own (and are thus the same), the latter
+# are from the article.
+const TERMINI = let
+    rc = reverse_complement
+    d = [
+        Segments.PB2 => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCGGAGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGAAACACGAGC")]
+        ),
+        Segments.PB1 => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCGGAGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGAAACACGAGC")]
+        ),
+        Segments.PA  => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCGGTGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"GTAGAAACACGTGC")]
+        ),
+        Segments.HA  => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCAGAGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGTAACAAGAGC")]
+        ),
+        Segments.NP  => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCACAGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGAAACAACAGC")]
+        ),
+        Segments.NA  => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCAGAGC"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGTAACAAGAGC")]
+        ),
+        Segments.MP => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCACGCACTT", dna"AGCAGAAGCAGGCACTT"],
+            [dna"CTTGTTTCTCCT", rc(dna"GTAGAAACAACGCACTT")]
+        ),
+        Segments.NS  => (
+            [dna"AGCAAAAGCAGG", dna"AGCAGAAGCAGAGGATT"],
+            [dna"CTTGTTTCTCCT", rc(dna"AGTAGTAACAAGAGGATT")]
+        )
+    ]
+    map(d) do (s, t)
+        s => (
+            map(sq -> BioSequences.ApproximateSearchQuery(sq, :forward), t[1]),
+            map(sq -> BioSequences.ApproximateSearchQuery(sq, :backward), t[2])
+        )
+    end |> Dict
+end
+
 """
     strip_false_termini!(data::Dict{String, IncompleteSegmentData}, filter_termini=true)
 
@@ -149,15 +198,11 @@ function strip_false_termini!(
     data::Dict{String, IncompleteSegmentData},
     filter_termini::Bool
 )
-    fwquery = BioSequences.ApproximateSearchQuery(dna"AGCAAAAGCAGG", :forward)
-    rvquery = BioSequences.ApproximateSearchQuery(dna"CTTGTTTCTCCT", :backward)
     good = Set{String}()
 
     for (id, segment_data) in data
-        seq = @unwrap_or segment_data.seq begin
-            continue
-        end
-        fiveprime, threeprime = false_termini_length(seq, fwquery, rvquery)
+        seq = @unwrap_or segment_data.seq continue
+        fiveprime, threeprime = false_termini_length(seq, segment_data.segment)
 
         # We discard something like 93% of all seqs here
         if fiveprime === nothing || threeprime === nothing
@@ -208,18 +253,28 @@ end
 or an UInt32 if one was found."
 function false_termini_length(
     seq::LongDNASeq,
-    fwquery::BioSequences.ApproximateSearchQuery,
-    bwquery::BioSequences.ApproximateSearchQuery,
+    segment::Segment
 )::NTuple{2, Union{Nothing, UInt32}}
     trim5, trim3 = UInt32(0), UInt32(0)
     SEARCHLEN = 100
 
+    fw_queries, bw_queries = TERMINI[segment]
+    trim3 = trim5 = nothing
     # Find true beginning of sequence, if it's within first SEARCHLEN bp
-    p = BioSequences.approxsearch(seq, fwquery, 2, 1, SEARCHLEN)
-    trim5 = isempty(p) ? nothing : UInt32(first(p) - 1)
-
+    for query in fw_queries
+        p = BioSequences.approxsearch(seq, query, 2, 1, SEARCHLEN)
+        if !isempty(p)
+            trim5 = UInt32(first(p) - 1)
+            break
+        end
+    end
     # Find true end of sequence
-    p = BioSequences.approxrsearch(seq, bwquery, 2, lastindex(seq), lastindex(seq)-SEARCHLEN)
-    trim3 = isempty(p) ? nothing : UInt32(lastindex(seq) - last(p))
+    for query in bw_queries
+        p = BioSequences.approxrsearch(seq, query, 2, lastindex(seq), lastindex(seq)-SEARCHLEN)
+        if !isempty(p)
+            trim3 = UInt32(lastindex(seq) - last(p))
+            break
+        end
+    end
     return (trim5, trim3)
 end
