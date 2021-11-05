@@ -5,6 +5,8 @@ const IDENTIFIERS_BAD = Set([
     "MK168420",
     "MK168525",
     "MK168545",
+    # This one has a 75 bp deletion that does not seem plausible
+    "KY926084",
 ])
 
 """

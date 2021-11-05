@@ -212,7 +212,7 @@ function check_cd_hit()
 end
 
 """
-    run_all(dir::AbstractString, deduplicate=true, filter_termini=true)
+    run_all(dir::AbstractString, deduplicate=true, filter_termini=false)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
 then cleans the genomeset, then parses the records, filters them, deduplicate them.
@@ -222,7 +222,7 @@ Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
 
 The executable `cd_hit_est` must be in the Julia PATH.
 """
-function run_all(dir::AbstractString, deduplicate::Bool=true, filter_termini::Bool=true)
+function run_all(dir::AbstractString, deduplicate::Bool=true, filter_termini::Bool=false)
     if deduplicate && !check_cd_hit()
         error("Command `cd-hit-est` could not be executed")
     end
