@@ -161,7 +161,6 @@ include("parse_genomeset.jl")
 include("parse_fasta.jl")
 include("parse_orfs.jl")
 include("filter.jl")
-include("clustering.jl")
 
 """
     parse_ncbi_records(genomeset, fasta, influenza_aa_dat, influenza_dat, filter_termini)
@@ -201,33 +200,14 @@ function parse_ncbi_records(
 end
 
 """
-Checks the presence of the cd_hit executable.
-"""
-function check_cd_hit()
-    try
-        process = run(`cd-hit-est`, wait=false)
-        wait(process)
-        return true
-    catch
-        return false
-    end
-end
-
-"""
-    run_all(dir::AbstractString, deduplicate=true, filter_termini=false)
+    run_all(dir::AbstractString filter_termini=false)
 
 Convenience function: Downloads influenza data to `dir` if not already present,
-then cleans the genomeset, then parses the records, filters them, deduplicate them.
+then cleans the genomeset, then parses the records, filters them.
 
-Returns `(all, deduplicated, path)`, where `all` and `deduplicated` are dicts of
-`identifier => SegmentData`, and `path` the directory where CD-HIT ran.
-
-The executable `cd_hit_est` must be in the Julia PATH.
+Returns a dict of `identifier => SegmentData`
 """
-function run_all(dir::AbstractString, deduplicate::Bool=true, filter_termini::Bool=false)
-    if deduplicate && !check_cd_hit()
-        error("Command `cd-hit-est` could not be executed")
-    end
+function run_all(dir::AbstractString, filter_termini::Bool=false)
     println("Downloading...")
     @time download_influenza_data(dir)
 
@@ -255,14 +235,8 @@ function run_all(dir::AbstractString, deduplicate::Bool=true, filter_termini::Bo
         isok_all(v)
     end
 
-    println("Optionally deduplicating...")
-    @time dupresult = if deduplicate
-        cd_hit_deduplicate_all(data)
-    else
-        nothing
-    end
     println("Done!")
-    return (data, dupresult)
+    return data
 end
 
 end # module
