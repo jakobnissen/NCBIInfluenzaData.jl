@@ -13,7 +13,7 @@ the NCBI Influenza data. In that case, you can assume that parsing incompletely
 cleaned data will fail, and not parse invalid data.
 """
 function clean_genomeset(outio::IO, inio::IO)
-    fields = Vector{SubString{String}}(undef, 11)
+    fields = fill(SubString("", 1, 0), 11)
 
     for line in eachline(inio) |> imap(strip) |> ifilter(!isempty)
         # Check the correct number of fields
@@ -145,7 +145,7 @@ function try_parse(
     ::Type{IncompleteSegmentData},
     line::Union{String, SubString{String}}
 )::Option{IncompleteSegmentData}
-    try_parse(IncompleteSegmentData, Vector{SubString{String}}(undef, 11), line)
+    try_parse(IncompleteSegmentData, fill(SubString("", 1, 0), 11), line)
 end
 
 function try_parse_year(s::Union{String, SubString})::Option{Int16}
@@ -157,7 +157,7 @@ end
 
 function parse_cleaned_genomeset(io::IO)::Dict{String, IncompleteSegmentData}
     result = Dict{String, IncompleteSegmentData}()
-    buffer = Vector{SubString{String}}(undef, 11)
+    buffer = fill(SubString("", 1, 0), 11)
     for line in eachline(io) |> imap(strip) |> ifilter(!isempty)
         data = @unwrap_or try_parse(IncompleteSegmentData, buffer, line) continue
         gi = data.id
